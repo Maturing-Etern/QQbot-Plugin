@@ -111,10 +111,10 @@ cp plugins/QQbot-Plugin/bridge/index.ts plugins/qqbot-bridge/index.ts
 
 ```bash
 # Node 24+（type stripping 直接跑 .ts，无需编译）
-QQBOT_APP_ID=1905178093 QQBOT_APP_SECRET=你的AppSecret node plugins/QQbot-Plugin/index.ts
+QQBOT_APP_ID=你的AppID QQBOT_APP_SECRET=你的AppSecret node plugins/QQbot-Plugin/index.ts
 
 # 或 bun（原生 TS 支持）
-QQBOT_APP_ID=1905178093 QQBOT_APP_SECRET=你的AppSecret bun plugins/QQbot-Plugin/index.ts
+QQBOT_APP_ID=你的AppID QQBOT_APP_SECRET=你的AppSecret bun plugins/QQbot-Plugin/index.ts
 ```
 
 > Node 22.6+ 可用 `node --experimental-strip-types`，Node 23.6+ / 24 默认支持 type stripping 直接跑 .ts，无需编译、零依赖。
