@@ -1,14 +1,3 @@
-/**
- * QQ 官方 Bot 适配器 — hotCat-bot 0.1.7 新框架 API 版本
- *
- * 对齐新框架接口：
- *   - event.onGroupMessage(fn)   fn 签名 (bot, event)，event 为 OneBot 形状群消息
- *   - api.sendGroupMessage(groupOpenId, ...messages)   camelCase
- *   - Message.text / at / reply / image   消息构造工具
- *
- * 零外部依赖（Node/Bun 内置 fetch + WebSocket）
- */
-
 export interface QQBotConfig {
   appId: string
   appSecret: string
@@ -30,16 +19,12 @@ const TOKEN_URL = 'https://bots.qq.com/app/getAppAccessToken'
 const INTENT_GROUP_AT = 1 << 25
 const INTENT_AT = 1 << 30
 
-// ─── 消息构造工具（结构兼容 hotCat-bot 0.1.7 Message）─────────
-
 export const Message = {
   text: (t: string) => ({ type: 'text', data: { text: t } }),
   at: (id: string | number) => ({ type: 'at', data: { qq: String(id) } }),
   reply: (id: string | number) => ({ type: 'reply', data: { id: String(id) } }),
   image: (file: string) => ({ type: 'image', data: { file } }),
 }
-
-// ─── QQ 官方 Bot 客户端 ──────────────────────────────────────
 
 export class QQBotClient {
   public api: {
@@ -89,8 +74,6 @@ export class QQBotClient {
     await this._connect()
   }
 
-  // ── Token ──
-
   private async _ensureToken() {
     if (this.accessToken && Date.now() < this.tokenExpiresAt - 60000) return
     if (this.config.debug) console.log('[QQBot] 获取 access_token...')
@@ -112,8 +95,6 @@ export class QQBotClient {
       this._ensureToken().catch(e => console.log(`[QQBot] 刷新 token 失败: ${e.message}`))
     }, 2 * 60 * 60 * 1000)
   }
-
-  // ── WebSocket ──
 
   private async _connect() {
     const url = WS_URLS[this.config.env]
@@ -182,8 +163,6 @@ export class QQBotClient {
     }
   }
 
-  // ── 发送 ──
-
   private async _sendMsgs(groupOpenId: string, messages: any[]) {
     await this._ensureToken()
     const content = this._convertMsgs(messages)
@@ -202,14 +181,14 @@ export class QQBotClient {
   private _convertMsgs(msgs: any[]): string {
     let r = ''
     for (const m of msgs) {
+      if (!m || typeof m !== 'object') continue
       if (m.type === 'text') r += m.data?.text || ''
       if (m.type === 'at') r += `<@${m.data?.qq || ''}>`
+      if (m.type === 'reply') continue
       if (m.type === 'image') r += '[图片]'
     }
     return r
   }
-
-  // ── 清理与重连 ──
 
   private _cleanup() {
     if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null }
@@ -224,8 +203,6 @@ export class QQBotClient {
     this.reconnectTimer = setTimeout(() => this._connect(), delay)
   }
 }
-
-// ─── 工厂 ──────────────────────────────────────────────────
 
 export function createQQBot(config: QQBotConfig): QQBotClient {
   return new QQBotClient(config)
