@@ -92,11 +92,13 @@ await qqBot.start()
 | `QQBOT_SANDBOX` | ❌ | `true` = 沙箱环境，默认 `false` |
 | `QQBOT_DEBUG` | ❌ | `true` = 开启调试日志 |
 
-**启动：**
+**启动（Node 24+ 直接跑，无需 bun）：**
 
 ```bash
-QQBOT_APP_ID=1905178093 QQBOT_APP_SECRET=你的AppSecret bun run plugins/QQbot-Plugin/index.ts
+QQBOT_APP_ID=1905178093 QQBOT_APP_SECRET=你的AppSecret node plugins/QQbot-Plugin/index.ts
 ```
+
+> Node 22.6+ 可用 `node --experimental-strip-types`，Node 23.6+ / 24 默认支持 type stripping 直接跑 .ts，无需编译、零依赖。
 
 ---
 
