@@ -1,6 +1,7 @@
 # QQbot-Plugin（更更更新嗯对）
 
-**hotCat-bot 的 QQ 官方 Bot 适配器（0.1.7 新框架 API 版）**
+hotCat-bot 的 QQ 官方 Bot 适配器（0.1.7 新框架 API 版）
+
 ---
 
 ## 功能
