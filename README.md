@@ -151,5 +151,3 @@ plugins/QQbot-Plugin/
 
 MIT
 
-## 作者的话
-README文档纯AI编写，不要再骂我了w w w~
