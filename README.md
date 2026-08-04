@@ -12,7 +12,7 @@
 - ✅ 接收群聊 @ 消息
 - ✅ 发送文本 / @ / 回复 / 图片占位消息
 - ✅ 自动心跳保活 + 断线自动重连 + Session 恢复
-- ✅ **对齐 hotCat-bot 0.1.7 新框架 API**（`event.onGroupMessage` / `api.sendGroupMessage` / `Message.*`）
+- ✅ **对齐 hotCat-bot 0.1.7 新框架 API**（`event.message.onGroupMessage` / `api.sendGroupMessage` / `Message.*`）
 - ✅ 零外部依赖（Node/Bun 内置 fetch + WebSocket）
 
 ---
@@ -36,7 +36,7 @@ import { qqBot, Message } from './plugins/QQbot-Plugin/index.ts'
 
 await qqBot.start()
 
-qqBot.event.onGroupMessage(async (bot, event) => {
+qqBot.event.message.onGroupMessage(async (bot, event) => {
   await bot.api.sendGroupMessage(event.group_id,
     Message.reply(event.message_id),
     Message.at(event.user_id),
@@ -53,7 +53,7 @@ qqBot.event.onGroupMessage(async (bot, event) => {
 新框架插件函数签名 `(bot, event)`，可直接挂到 QQ Bot 上：
 
 ```ts
-qqBot.event.onGroupMessage(async (bot, event) => {
+qqBot.event.message.onGroupMessage(async (bot, event) => {
   const msg = event.raw_message.trim()
   if (msg === '#ping') {
     await bot.api.sendGroupMessage(event.group_id, Message.text('pong!'))
@@ -75,7 +75,7 @@ const onGroup = async (bot: any, event: any) => {
 }
 
 bot.event.onGroupMessage(onGroup)     // NapCat
-qqBot.event.onGroupMessage(onGroup)   // QQ Bot
+qqBot.event.message.onGroupMessage(onGroup)   // QQ Bot
 
 await bot.start()
 await qqBot.start()
@@ -118,7 +118,7 @@ QQBOT_APP_ID=1905178093 QQBOT_APP_SECRET=你的AppSecret node plugins/QQbot-Plug
 | 成员 | 说明 |
 |------|------|
 | `qqBot.start()` | 连接并启动（自动获取 token） |
-| `qqBot.event.onGroupMessage(fn)` | 注册群消息处理器，`fn(bot, event)` |
+| `qqBot.event.message.onGroupMessage(fn)` | 注册群消息处理器，`fn(bot, event)` |
 | `qqBot.event.offGroupMessage(fn)` | 移除处理器 |
 | `qqBot.api.sendGroupMessage(groupOpenId, ...messages)` | 发送消息（`Message.*` 构造） |
 | `qqBot.api.getLoginInfo()` | 返回 `{ user_id: appId, nickname: 'QQBot' }` |

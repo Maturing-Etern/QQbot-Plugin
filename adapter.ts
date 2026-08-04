@@ -32,8 +32,10 @@ export class QQBotClient {
     getLoginInfo: () => Promise<{ user_id: string; nickname: string }>
   }
   public event: {
-    onGroupMessage: (fn: (bot: QQBotClient, event: any) => any) => void
-    offGroupMessage: (fn: Function) => void
+    message: {
+      onGroupMessage: (fn: (bot: QQBotClient, event: any) => any) => void
+      offGroupMessage: (fn: Function) => void
+    }
   }
 
   private config: Required<QQBotConfig>
@@ -60,11 +62,13 @@ export class QQBotClient {
     }
 
     this.event = {
-      onGroupMessage: (fn) => {
-        const w = async (event: any) => { await fn(this, event) }
-        this.groupHandlers.set(fn, w)
+      message: {
+        onGroupMessage: (fn) => {
+          const w = async (event: any) => { await fn(this, event) }
+          this.groupHandlers.set(fn, w)
+        },
+        offGroupMessage: (fn) => { this.groupHandlers.delete(fn) },
       },
-      offGroupMessage: (fn) => { this.groupHandlers.delete(fn) },
     }
   }
 
