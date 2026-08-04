@@ -1,3 +1,14 @@
+/**
+ * QQ 官方 Bot 适配器 — hotCat-bot 0.1.7 新框架 API 版本
+ *
+ * 对齐新框架接口：
+ *   - event.onGroupMessage(fn)   fn 签名 (bot, event)，event 为 OneBot 形状群消息
+ *   - api.sendGroupMessage(groupOpenId, ...messages)   camelCase
+ *   - Message.text / at / reply / image   消息构造工具
+ *
+ * 零外部依赖（Node/Bun 内置 fetch + WebSocket）
+ */
+
 export interface QQBotConfig {
   appId: string
   appSecret: string
@@ -19,10 +30,26 @@ const TOKEN_URL = 'https://bots.qq.com/app/getAppAccessToken'
 const INTENT_GROUP_AT = 1 << 25
 const INTENT_AT = 1 << 30
 
-export class QQBotAdapter {
-  public api: ReturnType<typeof this._buildAPI>
-  public onGroupMessageFns: ((ctx: any) => Promise<void>)[] = []
-  public selfData: any = {}
+// ─── 消息构造工具（结构兼容 hotCat-bot 0.1.7 Message）─────────
+
+export const Message = {
+  text: (t: string) => ({ type: 'text', data: { text: t } }),
+  at: (id: string | number) => ({ type: 'at', data: { qq: String(id) } }),
+  reply: (id: string | number) => ({ type: 'reply', data: { id: String(id) } }),
+  image: (file: string) => ({ type: 'image', data: { file } }),
+}
+
+// ─── QQ 官方 Bot 客户端 ──────────────────────────────────────
+
+export class QQBotClient {
+  public api: {
+    sendGroupMessage: (groupId: string, ...messages: any[]) => Promise<void>
+    getLoginInfo: () => Promise<{ user_id: string; nickname: string }>
+  }
+  public event: {
+    onGroupMessage: (fn: (bot: QQBotClient, event: any) => any) => void
+    offGroupMessage: (fn: Function) => void
+  }
 
   private config: Required<QQBotConfig>
   private ws: WebSocket | null = null
@@ -32,14 +59,28 @@ export class QQBotAdapter {
   private sessionId: string | null = null
   private reconnectCount = 0
   private maxReconnect = 20
-  private _msgHandler = false
   private accessToken = ''
   private tokenExpiresAt = 0
   private tokenRefreshTimer: ReturnType<typeof setInterval> | null = null
+  private groupHandlers = new Map<Function, (event: any) => Promise<void>>()
 
   constructor(config: QQBotConfig) {
     this.config = { env: 'prod', debug: false, ...config }
-    this.api = this._buildAPI()
+
+    this.api = {
+      sendGroupMessage: async (groupId, ...messages) => {
+        await this._sendMsgs(groupId, messages)
+      },
+      getLoginInfo: async () => ({ user_id: this.config.appId, nickname: 'QQBot' }),
+    }
+
+    this.event = {
+      onGroupMessage: (fn) => {
+        const w = async (event: any) => { await fn(this, event) }
+        this.groupHandlers.set(fn, w)
+      },
+      offGroupMessage: (fn) => { this.groupHandlers.delete(fn) },
+    }
   }
 
   async start() {
@@ -48,8 +89,7 @@ export class QQBotAdapter {
     await this._connect()
   }
 
-  async onGroupMessage() { if (!this._msgHandler) this._msgHandler = true }
-  async onNoticePoke() { console.log('[QQBot] 戳一戳事件不受支持') }
+  // ── Token ──
 
   private async _ensureToken() {
     if (this.accessToken && Date.now() < this.tokenExpiresAt - 60000) return
@@ -73,16 +113,7 @@ export class QQBotAdapter {
     }, 2 * 60 * 60 * 1000)
   }
 
-  private _buildAPI() {
-    const self = this
-    return {
-      send_group_msg: async (params: { group_id: string; message: any[] }) => {
-        const text = self._convertMsg(params.message)
-        await self._sendMsg(params.group_id, text)
-      },
-      get_login_info: async () => ({ user_id: self.config.appId, nickname: 'QQBot' }),
-    }
-  }
+  // ── WebSocket ──
 
   private async _connect() {
     const url = WS_URLS[this.config.env]
@@ -135,7 +166,7 @@ export class QQBotAdapter {
   private _dispatch(t: string, d: any) {
     if (t !== 'GROUP_AT_MESSAGE_CREATE' && t !== 'AT_MESSAGE_CREATE') return
     const content = (d.content || '').replace(/<@!\d+>/g, '').replace(/<@\d+>/g, '').trim()
-    const ctx = {
+    const event = {
       group_id: d.group_openid,
       user_id: d.author?.member_openid || '',
       sender: { user_id: d.author?.member_openid || '', nickname: '', role: 'member' },
@@ -146,13 +177,16 @@ export class QQBotAdapter {
       self_id: this.config.appId,
       time: Math.floor(Date.now() / 1000),
     }
-    for (const fn of this.onGroupMessageFns) {
-      fn(ctx).catch(e => console.log(`[QQBot] 插件错误: ${e}`))
+    for (const w of this.groupHandlers.values()) {
+      w(event).catch(e => console.log(`[QQBot] 插件错误: ${e}`))
     }
   }
 
-  private async _sendMsg(groupOpenId: string, content: string) {
+  // ── 发送 ──
+
+  private async _sendMsgs(groupOpenId: string, messages: any[]) {
     await this._ensureToken()
+    const content = this._convertMsgs(messages)
     try {
       const res = await fetch(`${API_URLS[this.config.env]}/v2/groups/${groupOpenId}/messages`, {
         method: 'POST',
@@ -165,14 +199,17 @@ export class QQBotAdapter {
     }
   }
 
-  private _convertMsg(msgs: any[]): string {
+  private _convertMsgs(msgs: any[]): string {
     let r = ''
     for (const m of msgs) {
       if (m.type === 'text') r += m.data?.text || ''
+      if (m.type === 'at') r += `<@${m.data?.qq || ''}>`
       if (m.type === 'image') r += '[图片]'
     }
     return r
   }
+
+  // ── 清理与重连 ──
 
   private _cleanup() {
     if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null }
@@ -186,4 +223,10 @@ export class QQBotAdapter {
     console.log(`[QQBot] ${delay}ms 后重连 (第${this.reconnectCount}次)`)
     this.reconnectTimer = setTimeout(() => this._connect(), delay)
   }
+}
+
+// ─── 工厂 ──────────────────────────────────────────────────
+
+export function createQQBot(config: QQBotConfig): QQBotClient {
+  return new QQBotClient(config)
 }

@@ -1,7 +1,7 @@
 {
   "name": "hotcat-adapter-qqbot",
-  "version": "1.0.0",
-  "description": "QQ 官方 Bot 适配器 — 通过 appId+appSecret 获取 access_token，直接连接 QQ 官方 API",
+  "version": "1.1.0",
+  "description": "QQ 官方 Bot 适配器（hotCat-bot 0.1.7 新框架 API）— 通过 appId+appSecret 获取 access_token，直接连接 QQ 官方 API，无需 NapCat",
   "author": "hotCat-bot",
   "license": "MIT",
   "type": "module",

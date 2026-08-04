@@ -1,61 +1,89 @@
-﻿# QQbot-Plugin
+# QQbot-Plugin
 
-**hotCat-bot 的 QQ 官方 Bot 适配器**
+**hotCat-bot 的 QQ 官方 Bot 适配器（0.1.7 新框架 API 版）**
 
-让 hotCat-bot 直接连接 QQ 官方 Bot API，**无需 NapCat**，无需任何第三方协议端。
+让 hotCat-bot 直接连接 QQ 官方 Bot API，**无需 NapCat**，无需任何第三方协议端，官方通道更稳定、无风控踢号风险。
 
 ---
 
 ## 功能
 
-- ✅ 直连 QQ 官方 Bot WebSocket
+- ✅ 直连 QQ 官方 Bot WebSocket（正式/沙箱双环境）
 - ✅ 接收群聊 @ 消息
-- ✅ 发送文本消息到群
-- ✅ 自动心跳保活
-- ✅ 断线自动重连
-- ✅ 支持 Session 恢复
-- ✅ 零外部依赖（使用 Node/Bun 内置 fetch + WebSocket）
+- ✅ 发送文本 / @ / 回复 / 图片占位消息
+- ✅ 自动心跳保活 + 断线自动重连 + Session 恢复
+- ✅ **对齐 hotCat-bot 0.1.7 新框架 API**（`event.onGroupMessage` / `api.sendGroupMessage` / `Message.*`）
+- ✅ 零外部依赖（Node/Bun 内置 fetch + WebSocket）
 
 ---
 
 ## 安装
 
-### 1. 复制插件
-
 ```bash
 cd hotCat-bot/plugins/
 git clone https://github.com/Maturing-Etern/QQbot-Plugin.git
-# 或者手动复制 QQbot-Plugin/ 目录到 plugins/ 下
+# 或手动复制 QQbot-Plugin/ 目录到 plugins/ 下
 ```
 
-### 2. 修改 index.ts
+> 适配器导出 `qqBot` 实例，签名对齐 hotCat-bot 0.1.7 的 `BotClient`（`event` / `api` / `start()`）。
 
-打开 hotCat-bot 根目录的 `index.ts`，在文件顶部添加：
+---
 
-```ts
-// ─── QQ 官方 Bot 适配器 ─────────────────────────────────
-
-import { qqBot } from './plugins/hotcat-adapter-qqbot/index.ts'
-```
-
-然后把原来使用 `bot` 的地方换成 `qqBot`：
+## 快速开始
 
 ```ts
-// 原来
-await bot.start()
-await bot.onGroupMessage()
-await bot.onNoticePoke()
+import { qqBot, Message } from './plugins/QQbot-Plugin/index.ts'
 
-// 改成
 await qqBot.start()
-await qqBot.onGroupMessage()
-await qqBot.onNoticePoke()
+
+qqBot.event.onGroupMessage(async (bot, event) => {
+  await bot.api.sendGroupMessage(event.group_id,
+    Message.reply(event.message_id),
+    Message.at(event.user_id),
+    Message.text(' 收到消息: '),
+    ...event.message.map(seg => Message.from ? seg : seg)  // 原样透传即可
+  )
+})
 ```
 
-> 注意：如果只想用 QQ Bot 模式，可以直接把 `bot` 替换为 `qqBot`。
-> 如果想同时保留 NapCat + QQ Bot，可以参考下文"双模式运行"。
+> `event` 为 OneBot 形状群消息：`group_id`（群 openid）、`user_id`、`message_id`、`raw_message`、`message`。
 
-### 3. 设置环境变量
+### 配合 hotCat-bot 0.1.7 新框架插件
+
+新框架插件函数签名 `(bot, event)`，可直接挂到 QQ Bot 上：
+
+```ts
+qqBot.event.onGroupMessage(async (bot, event) => {
+  const msg = event.raw_message.trim()
+  if (msg === '#ping') {
+    await bot.api.sendGroupMessage(event.group_id, Message.text('pong!'))
+  }
+})
+```
+
+### 双模式运行（NapCat + QQ Bot 共存）
+
+```ts
+import { bot } from 'hotcat-bot-qq/botClient'   // NapCat 客户端
+import { qqBot, Message } from './plugins/QQbot-Plugin/index.ts'  // QQ Bot
+
+const onGroup = async (bot: any, event: any) => {
+  const msg = event.raw_message.trim()
+  if (msg.startsWith('#help')) {
+    await bot.api.sendGroupMessage(event.group_id, Message.text('帮助菜单...'))
+  }
+}
+
+bot.event.onGroupMessage(onGroup)     // NapCat
+qqBot.event.onGroupMessage(onGroup)   // QQ Bot
+
+await bot.start()
+await qqBot.start()
+```
+
+---
+
+## 环境变量
 
 | 变量 | 必填 | 说明 |
 |------|------|------|
@@ -64,21 +92,10 @@ await qqBot.onNoticePoke()
 | `QQBOT_SANDBOX` | ❌ | `true` = 沙箱环境，默认 `false` |
 | `QQBOT_DEBUG` | ❌ | `true` = 开启调试日志 |
 
-**Windows CMD 启动：**
+**启动：**
 
-```cmd
-set QQBOT_APP_ID=1905178093
-set QQBOT_APP_SECRET=你的AppSecret
-set QQBOT_SANDBOX=false
-bun index.ts
-```
-
-**PowerShell 启动：**
-
-```powershell
-$env:QQBOT_APP_ID="1905178093"
-$env:QQBOT_APP_SECRET="你的AppSecret"
-bun index.ts
+```bash
+QQBOT_APP_ID=1905178093 QQBOT_APP_SECRET=你的AppSecret bun run plugins/QQbot-Plugin/index.ts
 ```
 
 ---
@@ -87,47 +104,23 @@ bun index.ts
 
 1. 打开 [QQ 开放平台](https://q.qq.com)
 2. 登录后进入你的机器人应用
-3. 左侧菜单 → **开发设置**
-4. 查看 **AppSecret**（首次获取需验证身份）
+3. 左侧菜单 → **开发设置** → 查看 **AppSecret**
 
-> **注意**：AppSecret 是敏感信息，不要泄露给他人或上传到公开仓库。
+> **注意**：AppSecret 是敏感信息，不要泄露或上传到公开仓库。
 > 适配器会自动通过 `appId + appSecret` 获取 access_token，无需手动获取 BotToken。
 
 ---
 
-## 双模式运行（NapCat + QQ Bot 共存）
+## API 参考
 
-如果想同时连 NapCat 和 QQ Bot，需要做一点改造：
-
-在 `index.ts` 中创建一个**消息分发函数**，把消息同时传给两个 bot：
-
-```ts
-import { bot } from './lib/bot.ts'
-import { qqBot } from './plugins/hotcat-adapter-qqbot/index.ts'
-
-// 合并消息处理器
-const combinedFns: ((ctx: any) => Promise<void>)[] = [
-  // ... 所有插件函数
-  getPigHubImg,
-  getChunithmSong,
-  marryGroupMember,
-  meme2img,
-  sendHelp,
-  handleWeather,
-  networkGenius,
-  // ...
-]
-
-bot.onGroupMessageFns.push(...combinedFns)
-qqBot.onGroupMessageFns.push(...combinedFns)
-
-await bot.start()
-await qqBot.start()
-await bot.onGroupMessage()
-await qqBot.onGroupMessage()
-// onNoticePoke 仅在 NapCat 下有效
-await bot.onNoticePoke()
-```
+| 成员 | 说明 |
+|------|------|
+| `qqBot.start()` | 连接并启动（自动获取 token） |
+| `qqBot.event.onGroupMessage(fn)` | 注册群消息处理器，`fn(bot, event)` |
+| `qqBot.event.offGroupMessage(fn)` | 移除处理器 |
+| `qqBot.api.sendGroupMessage(groupOpenId, ...messages)` | 发送消息（`Message.*` 构造） |
+| `qqBot.api.getLoginInfo()` | 返回 `{ user_id: appId, nickname: 'QQBot' }` |
+| `Message.text / at / reply / image` | 消息段构造工具 |
 
 ---
 
@@ -138,21 +131,19 @@ await bot.onNoticePoke()
 | 协议 | OneBot v11 (WebSocket) | 官方 Bot API (WebSocket) |
 | 消息接收 | 全部群消息 | 仅 @机器人的消息 |
 | 戳一戳 | ✅ 支持 | ❌ 不支持 |
-| 图片发送 | ✅ 支持 | ⚠️ 需使用 QQ 官方素材接口 |
-| 音频发送 | ✅ 支持 | ❌ 不支持 |
-| 环境依赖 | 需运行 NapCat | 零依赖 |
-| 风控风险 | NapCat 可能被踢 | 官方通道，稳定 |
+| 图片发送 | ✅ 支持 | ⚠️ 需使用 QQ 官方素材接口（当前为占位） |
+| 风控风险 | 可能被踢 | **官方通道，稳定** |
 
 ---
 
 ## 文件结构
 
 ```
-plugins/hotcat-adapter-qqbot/
+plugins/QQbot-Plugin/
 ├── README.md        ← 本文件
 ├── package.json     ← 插件元信息
-├── index.ts         ← 插件入口（导出的 qqBot 实例）
-└── adapter.ts       ← QQ Bot 适配器核心实现
+├── index.ts         ← 入口（导出 qqBot 实例 + Message）
+└── adapter.ts       ← QQ Bot 适配器核心实现（QQBotClient）
 ```
 
 ---
@@ -160,5 +151,3 @@ plugins/hotcat-adapter-qqbot/
 ## License
 
 MIT
-
-*内容为AI生成，根本不会写README文档（悲）*
