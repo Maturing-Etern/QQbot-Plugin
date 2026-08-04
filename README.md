@@ -81,6 +81,23 @@ await bot.start()
 await qqBot.start()
 ```
 
+### 框架插件式接入（PluginBase 桥接）
+
+适配器本身是连接层（与 `BotClient` 同级），**不是 PluginBase 消息插件**。如果你希望它被框架插件系统自动管理（`bot.plugin.scan` 自动加载 + 热插拔），使用本仓库自带的桥接插件：
+
+```bash
+# 1. 整个仓库放好（适配器）
+plugins/QQbot-Plugin/          # ← 本仓库
+
+# 2. 复制桥接插件到独立插件目录（改一行 import）
+cp plugins/QQbot-Plugin/bridge/index.ts plugins/qqbot-bridge/index.ts
+#    把 bridge/index.ts 里 `from '../index.ts'` 改为 `from '../QQbot-Plugin/index.ts'`
+```
+
+启动 bot 后框架自动扫描加载 `qqbot-bridge` 插件：`load()` 自动连接 QQ Bot，`unload()` 自动断开，支持热插拔。桥接插件内同时持有 `this.bot`（NapCat）和 `qqBot`（QQ Bot），双通道消息处理。
+
+> 若在 hotCat-bot 本地源码下运行，把 bridge 里 `import ... from 'hotcat-bot-qq/plugin'` 改为相对路径 `from '../plugin.ts'` 即可。
+
 ---
 
 ## 环境变量

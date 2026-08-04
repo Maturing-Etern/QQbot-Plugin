@@ -50,6 +50,7 @@ export class QQBotClient {
   private tokenExpiresAt = 0
   private tokenRefreshTimer: ReturnType<typeof setInterval> | null = null
   private groupHandlers = new Map<Function, (event: any) => Promise<void>>()
+  private started = false
 
   constructor(config: QQBotConfig) {
     this.config = { env: 'prod', debug: false, ...config }
@@ -73,9 +74,25 @@ export class QQBotClient {
   }
 
   async start() {
+    if (this.started) return
+    this.started = true
     await this._ensureToken()
     this._startTokenRefresh()
     await this._connect()
+  }
+
+  async close() {
+    this.started = false
+    if (this.ws) {
+      try { this.ws.close() } catch {}
+      this.ws = null
+    }
+    this._cleanup()
+    if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
+    if (this.tokenRefreshTimer) { clearInterval(this.tokenRefreshTimer); this.tokenRefreshTimer = null }
+    this.groupHandlers.clear()
+    this.sessionId = null
+    this.seq = null
   }
 
   private async _ensureToken() {
