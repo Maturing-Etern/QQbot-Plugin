@@ -1,8 +1,6 @@
-# QQbot-Plugin
+# QQbot-Plugin（更更更新嗯对）
 
-**hotCat-bot 的 QQ 官方 Bot 适配器（0.1.7 新框架 API 版）**
-
-让 hotCat-bot 直接连接 QQ 官方 Bot API，**无需 NapCat**，无需任何第三方协议端，官方通道更稳定、无风控踢号风险。
+hotCat-bot 的 QQ 官方 Bot 适配器（0.1.7 新框架 API 版）
 
 ---
 
@@ -170,3 +168,4 @@ plugins/QQbot-Plugin/
 ## License
 
 MIT
+
