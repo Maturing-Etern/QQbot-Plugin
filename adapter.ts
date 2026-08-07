@@ -29,12 +29,15 @@ export const Message = {
 export class QQBotClient {
   public api: {
     sendGroupMessage: (groupId: string, ...messages: any[]) => Promise<void>
+    sendPrivateMessage: (userOpenId: string, ...messages: any[]) => Promise<void>
     getLoginInfo: () => Promise<{ user_id: string; nickname: string }>
   }
   public event: {
     message: {
       onGroupMessage: (fn: (bot: QQBotClient, event: any) => any) => void
       offGroupMessage: (fn: Function) => void
+      onPrivateMessage: (fn: (bot: QQBotClient, event: any) => any) => void
+      offPrivateMessage: (fn: Function) => void
     }
   }
 
@@ -50,6 +53,7 @@ export class QQBotClient {
   private tokenExpiresAt = 0
   private tokenRefreshTimer: ReturnType<typeof setInterval> | null = null
   private groupHandlers = new Map<Function, (event: any) => Promise<void>>()
+  private privateHandlers = new Map<Function, (event: any) => Promise<void>>()
   private started = false
 
   constructor(config: QQBotConfig) {
@@ -57,7 +61,10 @@ export class QQBotClient {
 
     this.api = {
       sendGroupMessage: async (groupId, ...messages) => {
-        await this._sendMsgs(groupId, messages)
+        await this._sendMsgs(`${API_URLS[this.config.env]}/v2/groups/${groupId}/messages`, messages)
+      },
+      sendPrivateMessage: async (userOpenId, ...messages) => {
+        await this._sendMsgs(`${API_URLS[this.config.env]}/v2/users/${userOpenId}/messages`, messages)
       },
       getLoginInfo: async () => ({ user_id: this.config.appId, nickname: 'QQBot' }),
     }
@@ -69,6 +76,11 @@ export class QQBotClient {
           this.groupHandlers.set(fn, w)
         },
         offGroupMessage: (fn) => { this.groupHandlers.delete(fn) },
+        onPrivateMessage: (fn) => {
+          const w = async (event: any) => { await fn(this, event) }
+          this.privateHandlers.set(fn, w)
+        },
+        offPrivateMessage: (fn) => { this.privateHandlers.delete(fn) },
       },
     }
   }
@@ -91,6 +103,7 @@ export class QQBotClient {
     if (this.reconnectTimer) { clearTimeout(this.reconnectTimer); this.reconnectTimer = null }
     if (this.tokenRefreshTimer) { clearInterval(this.tokenRefreshTimer); this.tokenRefreshTimer = null }
     this.groupHandlers.clear()
+    this.privateHandlers.clear()
     this.sessionId = null
     this.seq = null
   }
@@ -166,8 +179,24 @@ export class QQBotClient {
   }
 
   private _dispatch(t: string, d: any) {
-    if (t !== 'GROUP_AT_MESSAGE_CREATE' && t !== 'AT_MESSAGE_CREATE') return
     const content = (d.content || '').replace(/<@!\d+>/g, '').replace(/<@\d+>/g, '').trim()
+    if (t === 'C2C_MESSAGE_CREATE') {
+      const event = {
+        user_id: d.author?.user_openid || d.author?.id || '',
+        sender: { user_id: d.author?.user_openid || '', nickname: '', role: 'member' },
+        message_id: d.id,
+        raw_message: content,
+        message: [{ type: 'text', data: { text: content } }],
+        message_type: 'private',
+        self_id: this.config.appId,
+        time: Math.floor(Date.now() / 1000),
+      }
+      for (const w of this.privateHandlers.values()) {
+        w(event).catch(e => console.log(`[QQBot] 插件错误: ${e}`))
+      }
+      return
+    }
+    if (t !== 'GROUP_AT_MESSAGE_CREATE' && t !== 'AT_MESSAGE_CREATE') return
     const event = {
       group_id: d.group_openid,
       user_id: d.author?.member_openid || '',
@@ -184,11 +213,11 @@ export class QQBotClient {
     }
   }
 
-  private async _sendMsgs(groupOpenId: string, messages: any[]) {
+  private async _sendMsgs(url: string, messages: any[]) {
     await this._ensureToken()
     const content = this._convertMsgs(messages)
     try {
-      const res = await fetch(`${API_URLS[this.config.env]}/v2/groups/${groupOpenId}/messages`, {
+      const res = await fetch(url, {
         method: 'POST',
         headers: { Authorization: `QQBot ${this.accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ content, msg_type: 0 }),
