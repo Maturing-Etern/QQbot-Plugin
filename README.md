@@ -96,6 +96,25 @@ cp plugins/QQbot-Plugin/bridge/index.ts plugins/qqbot-bridge/index.ts
 
 > 若在 hotCat-bot 本地源码下运行，把 bridge 里 `import ... from 'hotcat-bot-qq/plugin'` 改为相对路径 `from '../plugin.ts'` 即可。
 
+
+### 双通道自动加载（NapCat + QQ 官方 Bot 同时跑全部插件）
+
+`qqbot-bridge` 插件（`bridge/index.ts`）让 NapCat 框架启动时自动带起 QQ 官方 Bot，并把 `plugins/` 下**所有 PluginBase 插件**自动挂到两个通道：
+
+```bash
+# 1. 整个仓库放好（适配器）
+plugins/QQbot-Plugin/
+
+# 2. 复制桥接插件到独立插件目录
+cp plugins/QQbot-Plugin/bridge/index.ts plugins/qqbot-bridge/index.ts
+#    把 bridge 里 import 改为：
+#      from 'hotcat-bot-qq/plugin'  →  保持（npm 包）或改相对路径 '../../plugin'
+#      from '../index.ts'            →  改为 '../QQbot-Plugin/index.ts'
+# 3. 启动 NapCat 框架入口（bot.ts），框架自动加载 qqbot-bridge → 自动连接 QQ Bot + 双通道加载全部插件
+```
+
+> 自动加载器特性：5 秒 import 超时 + 自动跳过旧接口插件（非 PluginBase）/依赖缺失插件，不影响其他插件加载。
+> 旧接口插件（node-napcat-ts 风格）需迁移到 PluginBase 才能双通道自动接入。
 ---
 
 ## 环境变量

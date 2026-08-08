@@ -61,15 +61,21 @@ export class QQBotClient {
   constructor(config: QQBotConfig) {
     this.config = { env: 'prod', debug: false, ...config }
 
-    this.api = {
-      sendGroupMessage: async (groupId, ...messages) => {
+    const real = {
+      sendGroupMessage: async (groupId: string, ...messages: any[]) => {
         await this._sendMsgs('group', groupId, messages)
       },
-      sendPrivateMessage: async (userOpenId, ...messages) => {
+      sendPrivateMessage: async (userOpenId: string, ...messages: any[]) => {
         await this._sendMsgs('user', userOpenId, messages)
       },
       getLoginInfo: async () => ({ user_id: this.config.appId, nickname: 'QQBot' }),
     }
+    this.api = new Proxy(real, {
+      get(target, prop) {
+        if (prop in target) return Reflect.get(target, prop)
+        return async () => { console.log(`[QQBot] API 不支持: ${String(prop)}`) }
+      },
+    }) as any
 
     this.event = {
       message: {
