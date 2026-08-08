@@ -1,3 +1,5 @@
+import { readFile } from 'node:fs/promises'
+
 export interface QQBotConfig {
   appId: string
   appSecret: string
@@ -61,10 +63,10 @@ export class QQBotClient {
 
     this.api = {
       sendGroupMessage: async (groupId, ...messages) => {
-        await this._sendMsgs(`${API_URLS[this.config.env]}/v2/groups/${groupId}/messages`, messages)
+        await this._sendMsgs('group', groupId, messages)
       },
       sendPrivateMessage: async (userOpenId, ...messages) => {
-        await this._sendMsgs(`${API_URLS[this.config.env]}/v2/users/${userOpenId}/messages`, messages)
+        await this._sendMsgs('user', userOpenId, messages)
       },
       getLoginInfo: async () => ({ user_id: this.config.appId, nickname: 'QQBot' }),
     }
@@ -213,31 +215,85 @@ export class QQBotClient {
     }
   }
 
-  private async _sendMsgs(url: string, messages: any[]) {
+  private async _sendMsgs(scene: 'group' | 'user', openId: string, messages: any[]) {
     await this._ensureToken()
-    const content = this._convertMsgs(messages)
+    const base = `${API_URLS[this.config.env]}/v2/${scene === 'group' ? 'groups' : 'users'}/${openId}`
+    let content = ''
+    let image = ''
+    for (const m of messages) {
+      if (!m || typeof m !== 'object') continue
+      if (m.type === 'text') content += m.data?.text || ''
+      else if (m.type === 'at') content += `<@${m.data?.qq || ''}>`
+      else if (m.type === 'image' && !image) image = m.data?.file || ''
+    }
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `QQBot ${this.accessToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content, msg_type: 0 }),
-      })
-      if (!res.ok && this.config.debug) console.log(`[QQBot] 发送失败: ${res.status}`)
+      if (image) {
+        const fileInfo = await this._uploadFile(base, image)
+        if (!fileInfo) return
+        const res = await fetch(`${base}/messages`, {
+          method: 'POST',
+          headers: { Authorization: `QQBot ${this.accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, msg_type: 7, media: { file_info: fileInfo } }),
+        })
+        if (!res.ok && this.config.debug) console.log(`[QQBot] 发送失败: ${res.status}`)
+      } else {
+        const res = await fetch(`${base}/messages`, {
+          method: 'POST',
+          headers: { Authorization: `QQBot ${this.accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content, msg_type: 0 }),
+        })
+        if (!res.ok && this.config.debug) console.log(`[QQBot] 发送失败: ${res.status}`)
+      }
     } catch (e: any) {
       console.log(`[QQBot] 发送异常: ${e.message}`)
     }
   }
 
-  private _convertMsgs(msgs: any[]): string {
-    let r = ''
-    for (const m of msgs) {
-      if (!m || typeof m !== 'object') continue
-      if (m.type === 'text') r += m.data?.text || ''
-      if (m.type === 'at') r += `<@${m.data?.qq || ''}>`
-      if (m.type === 'reply') continue
-      if (m.type === 'image') r += '[图片]'
+  private async _uploadFile(base: string, file: string): Promise<string> {
+    try {
+      if (/^https?:\/\//.test(file)) {
+        const res = await fetch(`${base}/files`, {
+          method: 'POST',
+          headers: { Authorization: `QQBot ${this.accessToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ file_type: 1, url: file }),
+        })
+        if (!res.ok) {
+          console.log(`[QQBot] 上传失败 HTTP ${res.status}: ${await res.text()}`)
+          return ''
+        }
+        const d = await res.json()
+        const fileInfo = d?.data?.file_info || d?.file_info || ''
+        if (!fileInfo) {
+          console.log(`[QQBot] 上传响应无 file_info: ${JSON.stringify(d).slice(0, 200)}`)
+          return ''
+        }
+        return fileInfo
+      }
+      const buf = await readFile(file).catch(() => null)
+      if (!buf) { console.log(`[QQBot] 本地文件读取失败: ${file}`); return '' }
+      const form = new FormData()
+      form.append('file_type', '1')
+      form.append('file', new Blob([buf]), file.split(/[\\/]/).pop() || 'image.png')
+      const res = await fetch(`${base}/files`, {
+        method: 'POST',
+        headers: { Authorization: `QQBot ${this.accessToken}` },
+        body: form,
+      })
+      if (!res.ok) {
+        console.log(`[QQBot] 上传失败 HTTP ${res.status}: ${await res.text()}`)
+        return ''
+      }
+      const d = await res.json()
+      const fileInfo = d?.data?.file_info || d?.file_info || ''
+      if (!fileInfo) {
+        console.log(`[QQBot] 上传响应无 file_info: ${JSON.stringify(d).slice(0, 200)}`)
+        return ''
+      }
+      return fileInfo
+    } catch (e: any) {
+      console.log(`[QQBot] 上传异常: ${e.message}`)
+      return ''
     }
-    return r
   }
 
   private _cleanup() {
